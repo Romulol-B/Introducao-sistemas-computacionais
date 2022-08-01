@@ -17,7 +17,8 @@ Do todos os comandos...
 #define MAX_VAL 65535
 
 // Estados do Processador
-#define STATE_RESET 0
+#define 
+_RESET 0
 #define STATE_FETCH 1
 #define STATE_DECODE 2
 #define STATE_EXECUTE 3
@@ -341,14 +342,14 @@ loop:
 					state=STATE_FETCH;
 					break;
 
-								case LOADIMED:
+				case LOADIMED:
 					// reg[rx] = mem[PC];
 					// PC++;
 					selM1 = sPC;
 					RW = 0;
-					IncPC = 1;
 					selM2 = sDATA_OUT;
 					LoadReg[rx] = 1;
+					IncPC = 1;
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
@@ -358,71 +359,73 @@ loop:
 					// PC++;
 					selM1 = sPC;
 					RW = 0;
+					LoadMAR = 1; 
 					IncPC = 1;
-					LoadMAR = 1;
 					// -----------------------------
 					state=STATE_EXECUTE;
 					break;
 
 				case LOADINDEX:
-					// reg[rx] = MEMORY[reg[ry]];
+					/*DECODIFICAÇÃO / EXECUÇÃO*/
 					selM4 = ry;
 					selM1 = sM4;
 					RW = 0;
 					selM2 = sDATA_OUT;
 					LoadReg[rx] = 1;
+
+					// reg[rx] = MEMORY[reg[ry]];
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
 
 				case STORE:
+					//DECOD
+					selM1 = sPC;
+					RW = 0;
+					IncPC = 1;
+					LoadMAR = 1;
+
+
 					//MAR = MEMORY[PC];
 					//PC++;
-				    selM1 = sPC;
-					RW = 0;
-					LoadMAR = 1; 
-					IncPC = 1;   
+					
 					// -----------------------------
 					state=STATE_EXECUTE;
 					break;
 
 				case STOREINDEX:
-					//mem[reg[rx]] = reg[ry];
-					selM4 = rx;
-					selM1 = sM4;
-					RW = 1;
+					/*DECOD / EXE*/
 					selM3 = ry;
 					selM5 = sM3;
-					// -----------------------------
-					state=STATE_EXECUTE;
-					break;
+					RW = 1;
+					selM4 = rx;
+					selM1 = sM4;
+
+					//mem[reg[rx]] = reg[ry];
 					
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
+
 				case MOV:
-					switch(pega_pedaco(IR,1,0))
-					{ case 0:
-						// reg[rx] = reg[ry];
+
+					if(pega_pedaco(IR, 0, 0) == 0){
 						selM4 = ry;
 						selM2 = sM4;
 						LoadReg[rx] = 1;
-						break;
-						case 1:
-						// reg[rx] = SP;
+					}
+					else if(pega_pedaco(IR, 1, 1) == 0){
 						selM2 = sSP;
 						LoadReg[rx] = 1;
-						break;
-						default:
-						// SP = reg[rx];
+					}
+					else{
 						selM4 = rx;
 						LoadSP = 1;
-						break;
 					}
+
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
-
 
 				case ADD:
 				case SUB:
@@ -434,21 +437,43 @@ loop:
 				case LXOR:
 				case LNOT:
 					// reg[rx] = reg[ry] + reg[rz]; // Soma ou outra operacao
-					
+					selM3 =  ry;
+					selM4 = rz;
+					OP = pega_pedaco(IR, 15, 10);
+					selM2 = sULA;
+					LoadReg[rx] = 1;
+					selM6 = sULA;
+					LoadFR = 1;
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
 
 				case INC:
 					//reg[rx]++;                                  // Inc Rx ou DEC
+					selM3 = rx;
+					selM4 = 8;
 					
+					if(pega_pedaco(IR, 6, 6) == 0) OP = ADD;
+					else OP = SUB;
+
+					carry = 0;
+					selM2 = sULA;
+					LoadReg[rx] = 1;
+					selM6 = sULA;
+					LoadFR = 1;
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
 
 				case CMP:   // seta 3 flags: maior, menor ou igual
 					//if(rx == ry)
+					selM3 = rx;
+					selM4 = ry;
+					OP = pega_pedaco(IR, 15, 10);
 					
+					carry = 0;
+					selM6 = sULA;
+					LoadFR = 1;
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
@@ -492,34 +517,76 @@ loop:
 							|| (FR[5]==1 && (COND==11))                           // OVERFLOW
 							|| (FR[5]==0 && (COND==12))                           // NOT OVERFLOW
 							|| (FR[6]==1 && (COND==14))                           // NEGATIVO
-							|| (FR[9]==1 && (COND==13)))                          // DIVBYZERO
+							|| (FR[9]==1 && (COND==13)))                         // DIVBYZERO
 					{ // PC = MEMORY[PC];
 						selM1 = sPC;
 						RW = 0;
 						LoadPC = 1;
 					}
-					else
+					else IncPC = 1;
 						//PC++;
-						IncPC = 1;
+						
+
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
 
 				case CALL:
-					
-					state=STATE_FETCH;
+					COND = pega_pedaco(IR,9,6);
+
+					if((COND == 0)                       	                      // NO COND
+							|| (FR[0]==1 && (COND==7))                            // GREATER
+							|| ((FR[2]==1 || FR[0]==1) && (COND==9))              // GREATER EQUAL
+							|| (FR[1]==1 && (COND==8))                            // LESSER
+							|| ((FR[2]==1 || FR[1]==1) && (COND==10))             // LESSER EQUAL
+							|| (FR[2]==1 && (COND==1))                            // EQUAL
+							|| (FR[2]==0 && (COND==2))                            // NOT EQUAL
+							|| (FR[3]==1 && (COND==3))                            // ZERO
+							|| (FR[3]==0 && (COND==4))                            // NOT ZERO
+							|| (FR[4]==1 && (COND==5))                            // CARRY
+							|| (FR[4]==0 && (COND==6))                            // NOT CARRY
+							|| (FR[5]==1 && (COND==11))                           // OVERFLOW
+							|| (FR[5]==0 && (COND==12))                           // NOT OVERFLOW
+							|| (FR[6]==1 && (COND==14))                           // NEGATIVO
+							|| (FR[9]==1 && (COND==13))){
+						RW = 1;
+						selM1 = sSP;
+						selM5 = sPC;
+						DecSP = 1;
+						state = STATE_EXECUTE;
+					}
+					else{
+						IncPC = 1;
+						state=STATE_FETCH;
+					}
 					// -----------------------------
 					break;
 
 				case PUSH:
+					selM1 = sPC;
+					RW = 1;
 					
+					if(pega_pedaco(IR, 6, 6) == 0) selM3 = rx;
+					else selM3 = 8;
+					
+					selM5 = sM3;
+					DecSP = 1;
 					// -----------------------------
 					state=STATE_FETCH;
 					break;
 
 				case POP:
 					//SP++;
-					
+					selM1 = SP;
+					RW = 0;
+					if(pega_pedaco(IR, 6, 6) == 0){
+						selM2 = sDATA_OUT;
+						LoadReg[rx] = 1;
+					}
+					else{
+						selM6 = sDATA_OUT;
+						LoadFR = 1;
+					}
 					// -----------------------------
 					state=STATE_EXECUTE;
 					break;
@@ -636,7 +703,7 @@ loop:
 
 		default:
 			break;
-	}
+		}
 
 	// Selecao do Mux4   --> Tem que vir antes do M1 e do M2 que usam M4
 	if(selM4 == 8) M4 = 1;  // Seleciona 1 para fazer INC e DEC
